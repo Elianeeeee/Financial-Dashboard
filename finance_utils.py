@@ -79,19 +79,105 @@ def lookup_stock_basic() -> pd.DataFrame:
     )
     return df
 
+# @st.cache_data(show_spinner=False)
+# def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
+#     """
+#     一次性拉取指定 ts_code 在 [start,end] 年度的 fina_indicator 数据，
+#     转成日期，并 drop 重复报告期。
+#     """
+#     df = pro.fina_indicator(
+#         ts_code=ts_code,
+#         start_date=f"{start}0101",
+#         end_date=f"{end}1231"
+#     ).sort_values("end_date")
+#     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
+#     return df.drop_duplicates(subset="end_date", keep="last").reset_index(drop=True)
+
+# def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
+#     """
+#     一次性拉取 fina_indicator，包含：
+#     - current_ratio, quick_ratio, interst_income, ebit
+#     - 以及我们后续要画各类趋势的所有字段
+#     """
+#     df = pro.fina_indicator(
+#         ts_code=ts_code,
+#         start_date=f"{start}0101",
+#         end_date=f"{end}1231",
+#         # 多拉几个常用的字段
+#         fields="ts_code, end_date, current_ratio, quick_ratio, interst_income, ebit, "
+#                "grossprofit_margin, netprofit_margin, roe, or_yoy, netprofit_yoy, basic_eps_yoy, "
+#                "inv_turn, ar_turn, assets_turn, fcff, fcfe"
+#     ).sort_values("end_date")
+#     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
+#     return df.drop_duplicates("end_date", keep="last").reset_index(drop=True)
+
 @st.cache_data(show_spinner=False)
 def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
     """
-    一次性拉取指定 ts_code 在 [start,end] 年度的 fina_indicator 数据，
-    转成日期，并 drop 重复报告期。
+    一次性拉取所需的所有字段，包括 interst_income（财务费用）和后续要画趋势的常用指标。
     """
+    fields = ",".join([
+        "ts_code",
+        "end_date",
+        "current_ratio",
+        "quick_ratio",
+        "interst_income",    # <-- 把它加进来
+        "ebit",
+        "grossprofit_margin",
+        "netprofit_margin",
+        "roe",
+        "or_yoy",
+        "netprofit_yoy",
+        "basic_eps_yoy",
+        "inv_turn",
+        "ar_turn",
+        "assets_turn",
+        "fcff",
+        "fcfe"
+    ])
+
     df = pro.fina_indicator(
         ts_code=ts_code,
         start_date=f"{start}0101",
-        end_date=f"{end}1231"
+        end_date=f"{end}1231",
+        fields=fields
+    ).sort_values("end_date")
+
+    df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
+    return df.drop_duplicates("end_date", keep="last").reset_index(drop=True)
+
+@st.cache_data
+# def fetch_cash_flow(ts_code, start, end):
+#     df = pro.cashflow(
+#         ts_code=ts_code,
+#         start_date=f"{start}0101",
+#         end_date=f"{end}1231",
+#         fields="ts_code,end_date,interest_paid,ebit"
+#     )
+#     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
+#     return df.drop_duplicates("end_date", keep="last")
+def fetch_cash_flow(ts_code: str, start: int, end: int) -> pd.DataFrame:
+    """抓取现金流表，获取 interest_paid，用于利息保障倍数"""
+    df = pro.cashflow(
+        ts_code=ts_code,
+        start_date=f"{start}0101",
+        end_date=f"{end}1231",
+        fields="ts_code,end_date,interest_paid"
     ).sort_values("end_date")
     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
-    return df.drop_duplicates(subset="end_date", keep="last").reset_index(drop=True)
+    return df.drop_duplicates("end_date", keep="last").reset_index(drop=True)
+
+@st.cache_data
+def fetch_price(ts_code: str, start: int, end: int) -> pd.DataFrame:
+    """抓取日线收盘价，用于股价时序图"""
+    df = pro.daily(
+        ts_code=ts_code,
+        start_date=f"{start}0101",
+        end_date=f"{end}1231",
+        fields="trade_date,close"
+    ).sort_values("trade_date")
+    df["trade_date"] = pd.to_datetime(df["trade_date"], format="%Y%m%d")
+    return df.drop_duplicates("trade_date", keep="last").reset_index(drop=True)
 
 def compute_indicators(df: pd.DataFrame) -> pd.Series:
     """
@@ -130,31 +216,37 @@ def calc_profitability(df: pd.DataFrame) -> pd.Series:
         "ROE (%)":     latest.get("roe")
     })
 
-# def calc_solvency(df: pd.DataFrame) -> pd.Series:
-#     """偿债能力：流动比率、速动比率、利息保障倍数(EBIT/财务费用)"""
+
+# def calc_solvency(df: pd.DataFrame, cf_df: pd.DataFrame) -> pd.Series:
+#     """
+#     偿债能力：流动比率、速动比率、利息保障倍数(EBIT/interest_paid)
+#     """
 #     latest = df.iloc[-1]
-#     ebit   = latest.get("ebit")
-#     finexp = latest.get("finaexp_of_gr")  # 财务费用率≈财务费用/营业收入
+#     cf_latest = cf_df.iloc[-1]
+#     ebit = latest.get("ebit", None)
+#     ipaid = cf_latest.get("interest_paid", None)
 #     ib = None
-#     if ebit is not None and finexp not in (None, 0):
-#         ib = ebit / finexp
+#     if ipaid not in (None, 0) and ebit is not None:
+#         ib = ebit / ipaid
 #     return pd.Series({
 #         "流动比率":     latest.get("current_ratio"),
 #         "速动比率":     latest.get("quick_ratio"),
 #         "利息保障倍数": ib
 #     })
 
-def calc_solvency(df: pd.DataFrame, cf_df: pd.DataFrame) -> pd.Series:
+def calc_solvency(df: pd.DataFrame) -> pd.Series:
     """
-    偿债能力：流动比率、速动比率、利息保障倍数(EBIT/interest_paid)
+    偿债能力：直接从同一份 df 里取：
+    - 流动比率 current_ratio
+    - 速动比率 quick_ratio
+    - 利息保障倍数 = EBIT / 利息费用(interst_income)
     """
     latest = df.iloc[-1]
-    cf_latest = cf_df.iloc[-1]
-    ebit = latest.get("ebit", None)
-    ipaid = cf_latest.get("interest_paid", None)
+    ebit = latest.get("ebit")
+    interest = latest.get("interst_income")  # 注意是 interst_income 而不是 interest_paid
     ib = None
-    if ipaid not in (None, 0) and ebit is not None:
-        ib = ebit / ipaid
+    if ebit is not None and interest not in (None, 0):
+        ib = ebit / abs(interest)  # 取绝对值保证正负合规
     return pd.Series({
         "流动比率":     latest.get("current_ratio"),
         "速动比率":     latest.get("quick_ratio"),
@@ -186,14 +278,4 @@ def calc_cashflow(df: pd.DataFrame) -> pd.Series:
         "FCFF": latest.get("fcff"),
         "FCFE": latest.get("fcfe")
     })
-@st.cache_data
-def fetch_cash_flow(ts_code, start, end):
-    df = pro.cashflow(
-        ts_code=ts_code,
-        start_date=f"{start}0101",
-        end_date=f"{end}1231",
-        fields="ts_code,end_date,interest_paid,ebit"
-    )
-    df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
-    return df.drop_duplicates("end_date", keep="last")
 
