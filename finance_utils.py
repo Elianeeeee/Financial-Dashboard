@@ -1,7 +1,7 @@
 import tushare as ts
 import pandas as pd
 import streamlit as st
-
+from functools import reduce
 import google.generativeai as genai
 
 # 从 secrets.toml 里取
@@ -106,40 +106,7 @@ def fetch_full_industry_data(industry: str, period: str) -> pd.DataFrame:
     print("[调试 finance_utils] 数据获取流程结束。\n")
     return final_df
 
-# @st.cache_data(show_spinner=False)
-# def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
-#     """
-#     一次性拉取所需的所有字段，包括 interst_income（财务费用）和后续要画趋势的常用指标。
-#     """
-#     fields = ",".join([
-#         "ts_code",
-#         "end_date",
-#         "current_ratio",
-#         "quick_ratio",
-#         "interst_income",    # <-- 把它加进来
-#         "ebit",
-#         "grossprofit_margin",
-#         "netprofit_margin",
-#         "roe",
-#         "or_yoy",
-#         "netprofit_yoy",
-#         "basic_eps_yoy",
-#         "inv_turn",
-#         "ar_turn",
-#         "assets_turn",
-#         "fcff",
-#         "fcfe"
-#     ])
 
-#     df = pro.fina_indicator(
-#         ts_code=ts_code,
-#         start_date=f"{start}0101",
-#         end_date=f"{end}1231",
-#         fields=fields
-#     ).sort_values("end_date")
-
-#     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
-#     return df.drop_duplicates("end_date", keep="last").reset_index(drop=True)
 @st.cache_data(show_spinner=False)
 def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
     """
@@ -164,15 +131,6 @@ def fetch_all_data(ts_code: str, start: int, end: int) -> pd.DataFrame:
     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
     return df.drop_duplicates("end_date", keep="last").reset_index(drop=True)
 @st.cache_data
-# def fetch_cash_flow(ts_code, start, end):
-#     df = pro.cashflow(
-#         ts_code=ts_code,
-#         start_date=f"{start}0101",
-#         end_date=f"{end}1231",
-#         fields="ts_code,end_date,interest_paid,ebit"
-#     )
-#     df["end_date"] = pd.to_datetime(df["end_date"], format="%Y%m%d")
-#     return df.drop_duplicates("end_date", keep="last")
 def fetch_cash_flow(ts_code: str, start: int, end: int) -> pd.DataFrame:
     """抓取现金流表，获取 interest_paid，用于利息保障倍数"""
     df = pro.cashflow(
@@ -234,22 +192,6 @@ def calc_profitability(df: pd.DataFrame) -> pd.Series:
     })
 
 
-# def calc_solvency(df: pd.DataFrame, cf_df: pd.DataFrame) -> pd.Series:
-#     """
-#     偿债能力：流动比率、速动比率、利息保障倍数(EBIT/interest_paid)
-#     """
-#     latest = df.iloc[-1]
-#     cf_latest = cf_df.iloc[-1]
-#     ebit = latest.get("ebit", None)
-#     ipaid = cf_latest.get("interest_paid", None)
-#     ib = None
-#     if ipaid not in (None, 0) and ebit is not None:
-#         ib = ebit / ipaid
-#     return pd.Series({
-#         "流动比率":     latest.get("current_ratio"),
-#         "速动比率":     latest.get("quick_ratio"),
-#         "利息保障倍数": ib
-#     })
 
 def calc_solvency(df: pd.DataFrame) -> pd.Series:
     """
@@ -309,7 +251,7 @@ def get_ai_analysis(company_name: str, data_summary: str) -> str:
         return "错误：未找到Google AI的API密钥。请在.streamlit/secrets.toml中配置。"
 
     # 创建模型实例
-    model = genai.GenerativeModel('gemini-1.5-flash') # 使用最新、速度最快的Flash模型
+    model = genai.GenerativeModel('gemini-2.0-flash') # 使用最新、速度最快的Flash模型
 
     # --- 这是最关键的部分：构建高质量的提示词 (Prompt) ---
     prompt = f"""
@@ -345,7 +287,7 @@ def get_ai_price_chart_analysis(chart_data_summary: str) -> str:
     except (KeyError, FileNotFoundError):
         return "错误：未找到Google AI的API密钥。请在.streamlit/secrets.toml中配置。"
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
 
     # --- 专为图表分析设计的提示词 ---
     prompt = f"""
@@ -366,6 +308,74 @@ def get_ai_price_chart_analysis(chart_data_summary: str) -> str:
 
     try:
         response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"调用AI模型时发生错误: {e}"
+
+@st.cache_data(show_spinner="正在获取三大报表数据...")
+def fetch_accounting_data(ts_code: str, start_year: int, end_year: int) -> pd.DataFrame:
+    """
+    获取指定公司在给定年份范围内的三大报表关键数据，并合并成一张宽表。
+    """
+    start_date = f"{start_year}0101"
+    end_date = f"{end_year}1231"
+    
+    try:
+        # 1. 获取利润表关键字段
+        income_fields = "ts_code,end_date,revenue,oper_exp,ebit,n_income"
+        income_df = pro.income(ts_code=ts_code, start_date=start_date, end_date=end_date, fields=income_fields)
+
+        # 2. 获取资产负债表关键字段
+        balance_fields = "ts_code,end_date,total_assets,total_liab,accounts_receiv,inventories"
+        balance_df = pro.balancesheet(ts_code=ts_code, start_date=start_date, end_date=end_date, fields=balance_fields)
+
+        # 3. 获取现金流量表关键字段
+        cashflow_fields = "ts_code,end_date,n_cashflow_act"
+        cashflow_df = pro.cashflow(ts_code=ts_code, start_date=start_date, end_date=end_date, fields=cashflow_fields)
+
+        # 将所有数据表放入一个列表
+        data_frames = [income_df, balance_df, cashflow_df]
+        
+        # 过滤掉空的DataFrame
+        data_frames = [df for df in data_frames if not df.empty]
+        
+        if not data_frames:
+            return pd.DataFrame()
+
+        # 4. 使用reduce和merge将所有表基于ts_code和end_date合并
+        # on-=['ts_code', 'end_date'] 确保基于股票代码和报告日期精确匹配
+        # how='outer' 确保即使某个报告期在某张表中缺失，也不会丢失其他表的数据
+        df_merged = reduce(lambda left, right: pd.merge(left, right, on=['ts_code', 'end_date'], how='outer'), data_frames)
+        
+        # 按日期排序并处理重复值
+        df_merged['end_date'] = pd.to_datetime(df_merged['end_date'], format="%Y%m%d")
+        df_merged = df_merged.sort_values("end_date").drop_duplicates("end_date", keep="last").reset_index(drop=True)
+        
+        return df_merged
+        
+    except Exception as e:
+        st.error(f"获取三大报表数据时发生错误: {e}")
+        return pd.DataFrame()
+@st.cache_data(show_spinner="AI正在分析，请稍候...")
+def get_ai_response(prompt: str) -> str:
+    """
+    一个通用的函数，接收一个完整的prompt，并调用Gemini模型返回结果。
+    """
+    # 从secrets.toml中安全地获取API密钥
+    try:
+        api_key = st.secrets["google_ai"]["api_key"]
+        genai.configure(api_key=api_key)
+    except (KeyError, FileNotFoundError):
+        return "错误：未找到Google AI的API密钥。请在.streamlit/secrets.toml中配置。"
+
+    # 创建模型实例 (gemini-1.5-flash 是一个真实存在的、速度很快的模型)
+    model = genai.GenerativeModel('gemini-2.0-flash')
+
+    try:
+        response = model.generate_content(prompt)
+        # 增加对安全设置导致返回内容为空的处理
+        if not response.parts:
+            return "AI模型因为安全设置阻止了本次回复。这通常是因为Prompt或返回内容中可能包含了敏感信息。请尝试调整问题或检查数据。"
         return response.text
     except Exception as e:
         return f"调用AI模型时发生错误: {e}"

@@ -1,2 +1,1 @@
-# 忽略Streamlit的密钥文件
 .streamlit/secrets.toml
