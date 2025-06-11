@@ -1,7 +1,13 @@
-altair==5.5.0
-numpy==2.3.0
-pandas==2.3.0
-protobuf==6.31.1
-streamlit==1.45.1
-tushare==1.4.19
-google-generativeai==0.8.5
+# altair==5.5.0
+# numpy==2.3.0
+# pandas==2.3.0
+# protobuf==6.31.1
+# streamlit==1.45.1
+# tushare==1.4.19
+# google-generativeai==0.8.5
+streamlit
+pandas
+numpy
+altair
+tushare
+google-generativeai
