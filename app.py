@@ -53,6 +53,10 @@ if 'ai_accounting_reports' not in st.session_state:
     st.session_state.ai_accounting_reports = {} # 初始化为一个空字典
 if 'ai_strategy_reports' not in st.session_state:
     st.session_state.ai_strategy_reports = {} # 初始化为空字典，按行业存储报告
+
+if 'ai_cross_industry_report_content' not in st.session_state:
+    st.session_state.ai_cross_industry_report_content = ""
+
 st.sidebar.markdown("#### 搜索并添加公司")
 # 2. 搜索与添加逻辑
 name_filter = st.sidebar.text_input("输入公司名称或代码进行搜索：")
@@ -105,12 +109,30 @@ else:
             st.rerun()
 
 # 添加一个“清空”按钮，方便一次性移除所有
-if st.session_state.selected_stocks:
-    if st.sidebar.button("清空所有选择", use_container_width=True):
-        st.session_state.selected_stocks = []
-        st.session_state.analysis_started = False
-        st.rerun()
-
+# if st.session_state.selected_stocks:
+#     if st.sidebar.button("清空所有选择", use_container_width=True):
+#         st.session_state.selected_stocks = []
+#         st.session_state.analysis_started = False
+#         st.rerun()
+if st.sidebar.button("清空所有选择", use_container_width=True):
+    st.session_state.selected_stocks = []
+    st.session_state.analysis_started = False
+    
+    # --- 核心修改：在这里也加入清除报告状态的逻辑 ---
+    report_states_to_clear = [
+        'ai_price_report', 'ai_profit_report', 'ai_solvency_report',
+        'ai_growth_report', 'ai_operating_report', 'ai_cashflow_report',
+        'ai_accounting_reports', 'ai_strategy_reports',
+        'ai_cross_industry_report_content'
+    ]
+    for state_key in report_states_to_clear:
+        if state_key in st.session_state:
+            if isinstance(st.session_state[state_key], dict):
+                st.session_state[state_key] = {}
+            else:
+                st.session_state[state_key] = ""
+                
+    st.rerun()
 
 # 将最终的用户选择赋值给 stocks 变量，供后续代码使用
 stocks_to_analyze = st.session_state.selected_stocks
@@ -285,7 +307,7 @@ def display_metric_comparison(metric_name, metric_label, selected_codes_data, in
     col1, col2 = st.columns([1, 1])
 
     with col1: # 左侧：排名文字 + 仪表盘
-        st.markdown("**您的公司在行业中的位置**")
+        st.markdown("**公司在行业中的位置**")
         
         # --- 核心修复：在循环前，对传入的数据进行去重 ---
         unique_selected_data = selected_codes_data.drop_duplicates(subset=['ts_code'])
@@ -324,7 +346,7 @@ def display_metric_comparison(metric_name, metric_label, selected_codes_data, in
 
     with col2: # 右侧：带颜色和数值的龙头对比图
         # (这部分代码本身就是正确的，因为它有自己的去重逻辑，无需修改)
-        st.markdown("**与行业龙头的对比**")
+        st.markdown("**与行业排名靠前的公司对比**")
         top_2 = industry_df.head(2)
         comparison_df = pd.concat([top_2, selected_codes_data]).drop_duplicates(subset=['ts_code']).reset_index(drop=True)
         comparison_df = comparison_df.dropna(subset=[metric_name])
@@ -341,12 +363,12 @@ def display_metric_comparison(metric_name, metric_label, selected_codes_data, in
             # --- 核心修改：增加 labelPadding 来调整标签距离 ---
             x=alt.X('name:N', sort=None, title="公司", axis=alt.Axis(labelAngle=-45, labelPadding=5)),
             y=alt.Y(f'{metric_name}:Q', title=metric_label),
-            color=alt.Color('category:N', title='类别', scale=alt.Scale(domain=['您选择的公司', '行业龙头'], range=['steelblue', 'lightgray']))
+            color=alt.Color('category:N', title='类别', scale=alt.Scale(domain=['您选择的公司', '行业排名靠前公司'], range=['steelblue', 'lightgray']))
         )
         text = bars.mark_text(align='center', baseline='bottom', dy=-5).encode(
             text=alt.Text(f'{metric_name}:Q', format=format_str)
         )
-        bar_chart = (bars + text).properties(title="与行业第一对比", width=400, height=300)
+        bar_chart = (bars + text).properties( width=400, height=300)# title="与行业排名靠前公司对比",
         st.altair_chart(bar_chart)
 
 if st.sidebar.button("🚀 开始分析", use_container_width=True):
@@ -721,7 +743,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 st.subheader("🤖 盈利能力AI对比分析")
                 
                 # 只有一个按钮，用于分析本行业内所有选中的公司
-                if st.button(f"生成对所选公司的盈利能力对比报告", key=f"ai_profit_compare_{industry}"):
+                if st.button(f"生成对所选公司的盈利能力报告", key=f"ai_profit_compare_{industry}"):
                     
                     # 1. 为选中的每家公司收集数据，并拼接成一个大的数据摘要
                     all_summaries = []
@@ -812,7 +834,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 st.markdown("---")
                 st.subheader("🤖 偿债能力AI对比分析")
 
-                if st.button(f"生成对所选公司的偿债能力对比报告", key=f"ai_solvency_compare_{industry}"):
+                if st.button(f"生成对所选公司的偿债能力报告", key=f"ai_solvency_compare_{industry}"):
                     
                     # 1. 收集所有偿债能力相关的数据
                     all_summaries = []
@@ -1126,6 +1148,78 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 with st.spinner("AI正在进行前景分析与展望..."):
                     ai_report = get_ai_response(prompt)
                     st.markdown(ai_report)
+    # ====================================================================
+    #  【全新增量添加】的模块：跨行业AI对比分析
+    # ====================================================================
+
+    # 1. 只有当用户选择了多个行业的公司时，才显示这个模块
+    if len(grouped_stocks) > 1:
+        st.markdown("---")
+        st.header("🚀 跨行业AI综合研判")
+        st.info("您已选择来自不同行业的公司，除了上方各行业的独立深度分析外，我们额外为您提供一个聚焦核心指标的跨行业综合研判。")
+
+        # 为了避免重复获取数据，我们可以尝试从已有的数据中拼接
+        # （简化起见，这里我们还是重新获取一次，未来可以优化）
+        all_historical_data_list = []
+        for code in stocks_to_analyze:
+            df = fetch_all_data(code, hist_year_range[0], hist_year_range[1])
+            if not df.empty:
+                df['name'] = code_to_name_map.get(code, code)
+                all_historical_data_list.append(df)
+        
+        if all_historical_data_list:
+            combined_all_historical_df = pd.concat(all_historical_data_list, ignore_index=True)
+            
+            # 2. 提供一个独立的AI分析按钮
+            if st.button("生成跨行业综合AI研判报告", key="ai_cross_industry_report"):
+                # --- 这里粘贴之前版本中已经写好的、用于跨行业分析的逻辑 ---
+                # a. 准备数据摘要
+                all_summaries = []
+                metrics_to_compare = {
+                    'netprofit_margin': '净利率 (%)',
+                    'or_yoy': '营收同比 (%)',
+                    'debt_to_assets': '资产负-债率 (%)'
+                }
+                for code in stocks_to_analyze:
+                    company_name = code_to_name_map.get(code, code)
+                    industry_name = basic_df.loc[basic_df.ts_code == code, 'industry'].iloc[0]
+                    history_df = combined_all_historical_df[combined_all_historical_df['ts_code'] == code]
+                    
+                    summary_lines = [f"\n--- 公司: {company_name} ({code}), 所属行业: {industry_name} ---"]
+                    for metric, label in metrics_to_compare.items():
+                         latest_value = history_df[metric].iloc[-1] if not history_df.empty else 'N/A'
+                         summary_lines.append(f"- 最新 {label}: {latest_value:.2f}" if isinstance(latest_value, (int, float)) else f"- 最新 {label}: {latest_value}")
+                    all_summaries.extend(summary_lines)
+                
+                full_summary = "\n".join(all_summaries)
+
+                # b. 构建强大的跨行业Prompt
+                prompt = f"""
+                你是一位顶尖的基金经理，正在评估一个由几家来自不同行业的公司组成的投资组合。你的任务是基于我提供的核心财务数据，撰写一份专业的**跨行业对比研判报告**。
+
+                你的分析必须体现出专业性，要认识到直接对比不同行业公司的财务指标需要非常谨慎。请聚焦于以下几个方面：
+                1.  **盈利能力与效率**: 谁的净利率最高？这是否反映了其独特的商业模式或品牌溢价？
+                2.  **成长性**: 谁的营收增长最快？这是否是可持续的？
+                3.  **财务健康度**: 对比它们的资产负债率。请务必结合它们的行业特性来评论这个指标的合理性（例如，金融行业的高负债率是正常的，而科技公司则通常较低）。
+                4.  **综合投资价值**: 结合以上所有信息，从一个寻求“核心资产”的投资者角度出发，你会更青睐哪家公司？请给出一个明确的排序或选择，并提供你的核心投资逻辑。
+
+                以下是你需要分析的几家公司的最新数据：
+                ---
+                {full_summary}
+                ---
+                请直接输出你的专业分析报告，展现出你对不同商业模式的深刻理解。
+                """
+                with st.spinner("AI正在进行跨行业深度研判，请稍候..."):
+                    # 使用一个独立的session state来存储这份特殊的报告
+                    # 【核心修改】将AI返回的报告存入新的 session_state 变量中
+                    st.session_state.ai_cross_industry_report_content = get_ai_response(prompt)
+                    st.rerun() 
+
+    # 【核心修改】检查新的变量名
+    if 'ai_cross_industry_report_content' in st.session_state and st.session_state.ai_cross_industry_report_content:
+        with st.expander("查看跨行业AI研判报告", expanded=True):
+             # 【核心修改】显示新变量中存储的内容
+             st.markdown(st.session_state.ai_cross_industry_report_content)
    
 else:
     st.info("👈 请在左侧边栏选择公司并点击“开始分析”按钮。")
