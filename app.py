@@ -505,7 +505,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
         # --- Tab 2: 会计分析 ---
 
         with harvard_tabs[1]:
-            st.info("AI将扮演“资深审计师”，从商业模式出发，评估公司会计政策的稳健性与潜在风险，而不仅仅是进行数字对比。")
+            st.info("AI将扮演“资深审计师”，从商业模式出发，评估公司会计政策的稳健性与潜在风险。")
             
             for code in codes_in_industry:
                 company_name = code_to_name_map.get(code, code)
@@ -657,25 +657,46 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 st.subheader("盈利能力历史趋势")
                 # --- 图表升级：使用Melt和Facet来展示多个指标 ---
                 profit_metrics_to_plot = {
-                    'roe': 'ROE (%)',
-                    'netprofit_margin': '净利率 (%)',
-                    'grossprofit_margin': '毛利率 (%)'
+                    'roe': 'ROE',
+                    'netprofit_margin': '净利率',
+                    'grossprofit_margin': '毛利率'
                 }
                 df_p = combined_historical_df[['end_date', 'name', 'style'] + list(profit_metrics_to_plot.keys())].rename(columns=profit_metrics_to_plot)
                 df_p_melted = df_p.melt(id_vars=['end_date', 'name', 'style'], var_name='指标名称', value_name='指标值')
                 
-                profit_history_chart = alt.Chart(df_p_melted).mark_line().encode(
+                # profit_history_chart = alt.Chart(df_p_melted).mark_line().encode(
+                #     x=alt.X('end_date:T', title='报告期'),
+                #     y=alt.Y('指标值:Q', title='数值'),
+                #     color=alt.Color('name:N', title='公司'),
+                #     strokeDash=alt.StrokeDash('style:N', title='线型', legend=None)
+                # ).properties(
+                #     width=250, height=180
+                # ).facet(
+                #     column=alt.Column('指标名称:N', title=None) # 按指标名称分面
+                # ).resolve_scale(
+                #     y='independent' # 每个子图使用独立的Y轴刻度
+                # )
+
+                profit_history_chart = alt.Chart(df_p_melted).mark_line(point=True).encode(
                     x=alt.X('end_date:T', title='报告期'),
-                    y=alt.Y('指标值:Q', title='数值'),
+                    y=alt.Y('指标值:Q', title='数值 (%)'),
                     color=alt.Color('name:N', title='公司'),
-                    strokeDash=alt.StrokeDash('style:N', title='线型', legend=None)
+                    strokeDash=alt.StrokeDash('style:N', title='线型', legend=None),
+                    # --- 核心修改 1: 添加 tooltip ---
+                    tooltip=[
+                        alt.Tooltip('name', title='公司'),
+                        alt.Tooltip('指标名称', title='指标'),
+                        alt.Tooltip('end_date', title='报告期', format='%Y-%m-%d'),
+                        alt.Tooltip('指标值', title='数值', format='.2f')
+                    ]
                 ).properties(
                     width=250, height=180
                 ).facet(
-                    column=alt.Column('指标名称:N', title=None) # 按指标名称分面
+                    column=alt.Column('指标名称:N', title=None)
                 ).resolve_scale(
-                    y='independent' # 每个子图使用独立的Y轴刻度
-                )
+                    y='independent'
+                ).interactive()
+
                 st.altair_chart(profit_history_chart, use_container_width=True)
                 # --- 第二部分：新增“指标对标”区域，并采用Tabs切换 ---
                 st.markdown("---")
@@ -686,13 +707,13 @@ if st.session_state.analysis_started and stocks_to_analyze:
                     metric_tabs = st.tabs(["ROE 对标", "净利率 对标", "毛利率 对标"])
 
                     with metric_tabs[0]:
-                        display_metric_comparison('roe', 'ROE (%)', selected_data, full_industry_df, format_str='{:.2f}%')
+                        display_metric_comparison('roe', 'ROE', selected_data, full_industry_df, format_str='{:.2f}%')
                     
                     with metric_tabs[1]:
-                        display_metric_comparison('netprofit_margin', '净利率 (%)', selected_data, full_industry_df, format_str='{:.2f}%')
+                        display_metric_comparison('netprofit_margin', '净利率', selected_data, full_industry_df, format_str='{:.2f}%')
 
                     with metric_tabs[2]:
-                        display_metric_comparison('grossprofit_margin', '毛利率 (%)', selected_data, full_industry_df, format_str='{:.2f}%')
+                        display_metric_comparison('grossprofit_margin', '毛利率', selected_data, full_industry_df, format_str='{:.2f}%')
                 else:
                     st.warning("无有效的行业数据，无法进行指标对标分析。")
                 # --- 全新升级：盈利能力AI对比分析模块 ---
@@ -766,15 +787,26 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 df_s = combined_historical_df[['end_date', 'name', 'style'] + list(solvency_metrics_to_plot.keys())].rename(columns=solvency_metrics_to_plot)
                 df_s_melted = df_s.melt(id_vars=['end_date', 'name', 'style'], var_name='指标名称', value_name='指标值')
 
-                solvency_history_chart = alt.Chart(df_s_melted).mark_line().encode(
+                # solvency_history_chart = alt.Chart(df_s_melted).mark_line().encode(
+                #     x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值'),
+                #     color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
+                # ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                solvency_history_chart = alt.Chart(df_s_melted).mark_line(point=True).encode(
                     x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值'),
-                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
-                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None),
+                    tooltip=[
+                        alt.Tooltip('name', title='公司'),
+                        alt.Tooltip('指标名称', title='指标'),
+                        alt.Tooltip('end_date', title='报告期', format='%Y-%m-%d'),
+                        alt.Tooltip('指标值', title='数值', format='.2f')
+                    ]
+                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent').interactive()
+
                 st.altair_chart(solvency_history_chart, use_container_width=True)
                 st.markdown("---"); st.subheader("偿债能力指标对标")
                 if not selected_data.empty:
                     metric_tabs = st.tabs(["资产负债率 对标", "流动比率 对标", "速动比率 对标"])
-                    with metric_tabs[0]: display_metric_comparison('debt_to_assets', '资产负债率 (%)', selected_data, full_industry_df, ascending=True, format_str='{:.2f}%')
+                    with metric_tabs[0]: display_metric_comparison('debt_to_assets', '资产负债率', selected_data, full_industry_df, ascending=True, format_str='{:.2f}%')
                     with metric_tabs[1]: display_metric_comparison('current_ratio', '流动比率', selected_data, full_industry_df)
                     with metric_tabs[2]: display_metric_comparison('quick_ratio', '速动比率', selected_data, full_industry_df)
                 st.markdown("---")
@@ -841,16 +873,28 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 df_g = combined_historical_df[['end_date', 'name', 'style'] + list(growth_metrics_to_plot.keys())].rename(columns=growth_metrics_to_plot)
                 df_g_melted = df_g.melt(id_vars=['end_date', 'name', 'style'], var_name='指标名称', value_name='指标值')
 
-                growth_history_chart = alt.Chart(df_g_melted).mark_line().encode(
-                    x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值 (%)'),
-                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
-                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                # growth_history_chart = alt.Chart(df_g_melted).mark_line().encode(
+                #     x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值 (%)'),
+                #     color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
+                # ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                growth_history_chart = alt.Chart(df_g_melted).mark_line(point=True).encode(
+                    x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值'),
+                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None),
+                    tooltip=[
+                        alt.Tooltip('name', title='公司'),
+                        alt.Tooltip('指标名称', title='指标'),
+                        alt.Tooltip('end_date', title='报告期', format='%Y-%m-%d'),
+                        alt.Tooltip('指标值', title='数值', format='.2f')
+                    ]
+                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent').interactive()
+
+
                 st.altair_chart(growth_history_chart, use_container_width=True)
                 st.markdown("---"); st.subheader("成长能力指标对标")
                 if not selected_data.empty:
                     metric_tabs = st.tabs(["营收同比 对标", "净利同比 对标"])
-                    with metric_tabs[0]: display_metric_comparison('or_yoy', '营收同比 (%)', selected_data, full_industry_df, format_str='{:.2f}%')
-                    with metric_tabs[1]: display_metric_comparison('netprofit_yoy', '净利同比 (%)', selected_data, full_industry_df, format_str='{:.2f}%')
+                    with metric_tabs[0]: display_metric_comparison('or_yoy', '营收同比', selected_data, full_industry_df, format_str='{:.2f}%')
+                    with metric_tabs[1]: display_metric_comparison('netprofit_yoy', '净利同比', selected_data, full_industry_df, format_str='{:.2f}%')
                 st.markdown("---")
                 st.subheader("🤖 成长能力AI对比分析")
                 if st.button(f"生成成长能力对比报告", key=f"ai_growth_compare"):
@@ -901,10 +945,22 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 df_o = combined_historical_df[['end_date', 'name', 'style'] + list(op_metrics_to_plot.keys())].rename(columns=op_metrics_to_plot)
                 df_o_melted = df_o.melt(id_vars=['end_date', 'name', 'style'], var_name='指标名称', value_name='指标值')
                 
-                op_history_chart = alt.Chart(df_o_melted).mark_line().encode(
-                    x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='周转次数'),
-                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
-                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                # op_history_chart = alt.Chart(df_o_melted).mark_line().encode(
+                #     x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='周转次数'),
+                #     color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
+                # ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+
+                op_history_chart = alt.Chart(df_o_melted).mark_line(point=True).encode(
+                    x=alt.X('end_date:T', title='报告期'), y=alt.Y('指标值:Q', title='数值 (%)'),
+                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None),
+                    tooltip=[
+                        alt.Tooltip('name', title='公司'),
+                        alt.Tooltip('指标名称', title='指标'),
+                        alt.Tooltip('end_date', title='报告期', format='%Y-%m-%d'),
+                        alt.Tooltip('指标值', title='数值', format='.2f')
+                    ]
+                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent').interactive()
+ 
                 st.altair_chart(op_history_chart, use_container_width=True)
                 st.markdown("---")
                 if not selected_data.empty:
@@ -959,10 +1015,22 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 df_c = combined_historical_df[['end_date', 'name', 'style'] + list(cash_metrics_to_plot.keys())].rename(columns=cash_metrics_to_plot)
                 df_c_melted = df_c.melt(id_vars=['end_date', 'name', 'style'], var_name='指标名称', value_name='金额 (元)')
                 
-                cash_history_chart = alt.Chart(df_c_melted).mark_line().encode(
+                # cash_history_chart = alt.Chart(df_c_melted).mark_line().encode(
+                #     x=alt.X('end_date:T', title='报告期'), y=alt.Y('金额 (元):Q', title='金额 (元)'),
+                #     color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
+                # ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+
+                cash_history_chart = alt.Chart(df_c_melted).mark_line(point=True).encode(
                     x=alt.X('end_date:T', title='报告期'), y=alt.Y('金额 (元):Q', title='金额 (元)'),
-                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None)
-                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent')
+                    color=alt.Color('name:N', title='公司'), strokeDash=alt.StrokeDash('style:N', legend=None),
+                    tooltip=[
+                        alt.Tooltip('name', title='公司'),
+                        alt.Tooltip('指标名称', title='指标'),
+                        alt.Tooltip('end_date', title='报告期', format='%Y-%m-%d'),
+                        alt.Tooltip('金额 (元)', title='金额', format=',.0f') # 使用千分位格式化
+                    ]
+                ).properties(width=250, height=180).facet(column=alt.Column('指标名称:N', title=None)).resolve_scale(y='independent').interactive()
+
                 st.altair_chart(cash_history_chart, use_container_width=True)
                 st.markdown("---")
                 st.subheader("🤖 现金流AI独立分析")
