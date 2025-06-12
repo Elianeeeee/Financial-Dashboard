@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import numpy as np
+from thefuzz import fuzz
 from collections import defaultdict
 # from finance_utils import (
 #     lookup_stock_basic,
@@ -17,6 +18,7 @@ from collections import defaultdict
 #     calc_cashflow
 #     #fetch_industry_metrics
 # )
+
 from finance_utils import (
     lookup_stock_basic,
     fetch_all_data,
@@ -62,15 +64,50 @@ st.sidebar.markdown("#### 搜索并添加公司")
 name_filter = st.sidebar.text_input("输入公司名称或代码进行搜索：")
 
 if name_filter:
-    # 搜索匹配的公司
-    name_mask = basic_df["name"].str.contains(name_filter, na=False, case=False)
+    # # 搜索匹配的公司
+    # name_mask = basic_df["name"].str.contains(name_filter, na=False, case=False)
+    # code_mask = basic_df["ts_code"].str.contains(name_filter, na=False, case=False)
+    # combined_mask = name_mask | code_mask
+    # search_results_df = basic_df[combined_mask]
+    
+    # # 创建给 selectbox 用的选项
+    # search_options = {f"{r['name']} ({r.ts_code})": r.ts_code for _, r in search_results_df.iterrows()}
+    # 1. 股票代码的精确包含匹配逻辑保持不变，因为代码通常是精确输入
     code_mask = basic_df["ts_code"].str.contains(name_filter, na=False, case=False)
-    combined_mask = name_mask | code_mask
-    search_results_df = basic_df[combined_mask]
+
+    # 2. 对公司名称使用模糊匹配
+    #    a. 定义一个函数来计算相似度分数。我们使用 partial_ratio，
+    #       它很适合处理“中石油”匹配“中国石油”这类部分匹配的情况。
+    def calculate_similarity(name):
+        # 忽略大小写
+        return fuzz.partial_ratio(name_filter.lower(), name.lower())
+
+    #    b. 对 `basic_df` 中的每一个公司名称，都计算它和用户输入的相似度
+    #       .apply() 会为每一行都运行一次 calculate_similarity 函数
+    scores = basic_df['name'].apply(calculate_similarity)
     
-    # 创建给 selectbox 用的选项
+    #    c. 创建一个布尔 mask，筛选出分数高于某个阈值的公司
+    #       阈值75是一个比较好的起点，可以根据需要调整
+    similarity_threshold = 75
+    name_mask = scores >= similarity_threshold
+
+    # 3. 将名称模糊匹配结果和代码精确匹配结果用 `|` (或) 运算符结合
+    final_mask = name_mask | code_mask
+    search_results_df = basic_df[final_mask]
+
+    # 4. (可选但推荐) 按相似度分数对结果进行排序，最相关的排在前面
+    #    我们只对通过名称匹配到的结果进行排序
+    if name_mask.any():
+        # 创建一个临时列用于排序
+        search_results_df = search_results_df.assign(score=scores)
+        # 只对名称匹配的结果按分数降序排，代码匹配的结果排在后面
+        search_results_df = search_results_df.sort_values(
+            by='score', 
+            ascending=False, 
+            key=lambda s: s.where(name_mask, 0) # 让代码匹配项的分数为0，排在后面
+        ).drop(columns='score') # 删除临时列   
+
     search_options = {f"{r['name']} ({r.ts_code})": r.ts_code for _, r in search_results_df.iterrows()}
-    
     if not search_options:
         st.sidebar.info("没有找到匹配的公司。")
     else:
