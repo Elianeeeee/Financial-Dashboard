@@ -11,3 +11,4 @@ numpy
 altair
 tushare
 google-generativeai
+thefuzz
