@@ -356,7 +356,7 @@ def display_metric_comparison(metric_name, metric_label, selected_codes_data, in
             
         selected_codes_list = selected_codes_data['ts_code'].tolist()
         comparison_df['category'] = comparison_df['ts_code'].apply(
-            lambda x: '您选择的公司' if x in selected_codes_list else '行业龙头'
+            lambda x: '您选择的公司' if x in selected_codes_list else '行业排名靠前公司'
         )
         
         bars = alt.Chart(comparison_df).mark_bar().encode(
@@ -368,7 +368,7 @@ def display_metric_comparison(metric_name, metric_label, selected_codes_data, in
         text = bars.mark_text(align='center', baseline='bottom', dy=-5).encode(
             text=alt.Text(f'{metric_name}:Q', format=format_str)
         )
-        bar_chart = (bars + text).properties( width=400, height=300)# title="与行业排名靠前公司对比",
+        bar_chart = (bars + text).properties(  width=400, height=300)# title="与行业排名靠前公司对比",
         st.altair_chart(bar_chart)
 
 if st.sidebar.button("🚀 开始分析", use_container_width=True):
@@ -489,7 +489,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
             company_names_str = "、".join(company_names_list)
 
             # 只需一个按钮，触发对所有选中公司的全面分析
-            if st.button(f"生成对【{company_names_str}】的AI战略对比分析报告", key=f"ai_strategy_compare_{industry}"):
+            if st.button(f"生成对【{company_names_str}】的AI战略分析报告", key=f"ai_strategy_compare_{industry}"):
                 
                 # 构建一个更强大的、要求进行独立分析+对比分析的Prompt
                 prompt = f"""
@@ -515,7 +515,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 请确保你的报告结构清晰、逻辑严谨，直接输出最终的分析报告。
                 """
                 
-                with st.spinner("AI正在进行多公司战略对比分析，这可能需要一些时间..."):
+                with st.spinner("AI正在进行公司战略分析，这可能需要一些时间..."):
                     ai_report = get_ai_response(prompt)
                     # 将生成的完整报告存入session state
                     st.session_state.ai_strategy_reports[industry] = ai_report
@@ -1105,7 +1105,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
             st.info("AI将扮演“首席分析师”，结合我们提供的公司最新财务快照和它自身的宏观知识库，对公司的未来发展前景进行预测和评级。")
 
             # 这个分析是面向所有选中公司的对比分析
-            if st.button("生成AI前景对比分析报告", key=f"ai_prospect_compare_{industry}"):
+            if st.button("生成AI前景分析报告", key=f"ai_prospect_compare_{industry}"):
                 
                 # 1. 为选中的每家公司，准备一份“财务快照”
                 all_summaries = []
@@ -1155,7 +1155,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
     # 1. 只有当用户选择了多个行业的公司时，才显示这个模块
     if len(grouped_stocks) > 1:
         st.markdown("---")
-        st.header("🚀 跨行业AI综合研判")
+        st.header("跨行业AI综合研判")
         st.info("您已选择来自不同行业的公司，除了上方各行业的独立深度分析外，我们额外为您提供一个聚焦核心指标的跨行业综合研判。")
 
         # 为了避免重复获取数据，我们可以尝试从已有的数据中拼接
