@@ -721,7 +721,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 st.subheader("🤖 盈利能力AI对比分析")
                 
                 # 只有一个按钮，用于分析本行业内所有选中的公司
-                if st.button(f"生成对所选公司的盈利能力对比报告", key=f"ai_profit_compare"):
+                if st.button(f"生成对所选公司的盈利能力对比报告", key=f"ai_profit_compare_{industry}"):
                     
                     # 1. 为选中的每家公司收集数据，并拼接成一个大的数据摘要
                     all_summaries = []
@@ -812,7 +812,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                 st.markdown("---")
                 st.subheader("🤖 偿债能力AI对比分析")
 
-                if st.button(f"生成对所选公司的偿债能力对比报告", key=f"ai_solvency_compare"):
+                if st.button(f"生成对所选公司的偿债能力对比报告", key=f"ai_solvency_compare_{industry}"):
                     
                     # 1. 收集所有偿债能力相关的数据
                     all_summaries = []
@@ -897,7 +897,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                     with metric_tabs[1]: display_metric_comparison('netprofit_yoy', '净利同比', selected_data, full_industry_df, format_str='{:.2f}%')
                 st.markdown("---")
                 st.subheader("🤖 成长能力AI对比分析")
-                if st.button(f"生成成长能力对比报告", key=f"ai_growth_compare"):
+                if st.button(f"生成成长能力对比报告", key=f"ai_growth_compare_{industry}"):
                     all_summaries = []
                     for code in codes_in_industry:
                         company_name = code_to_name_map.get(code, code)
@@ -967,7 +967,7 @@ if st.session_state.analysis_started and stocks_to_analyze:
                     display_metric_comparison('assets_turn', '总资产周转率', selected_data, full_industry_df)
                 st.markdown("---")
                 st.subheader("🤖 运营能力AI对比分析")
-                if st.button(f"生成运营能力对比报告", key=f"ai_operating_compare"):
+                if st.button(f"生成运营能力对比报告", key=f"ai_operating_compare_{industry}"):
                     all_summaries = []
                     for code in codes_in_industry:
                         company_name = code_to_name_map.get(code, code)
